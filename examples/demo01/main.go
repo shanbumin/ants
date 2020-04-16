@@ -1,64 +1,40 @@
-
-
 package main
 
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
-
 	"github.com/panjf2000/ants/v2"
 )
 
-var sum int32
 
-func myFunc(i interface{}) {
-	n := i.(int32)
-	atomic.AddInt32(&sum, n)
-	fmt.Printf("run with %d\n", n)
-}
 
 func demoFunc() {
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 	fmt.Println("Hello World!")
 }
 
+//todo 未指明创建池子，则使用默认的池子,这种提交的任务只支持提交任务的时候指明回调函数
+//todo  ants.Release()
+//todo  ants.Submit(syncCalculateSum)
 func main() {
 	defer ants.Release()
-
-	runTimes := 1000
-
-	// Use the common pool.
+	//自定义变量
 	var wg sync.WaitGroup
+	//任务回调函数
 	syncCalculateSum := func() {
 		demoFunc()
 		wg.Done()
 	}
+	//循环提交任务
+	runTimes := 1000
 	for i := 0; i < runTimes; i++ {
 		wg.Add(1)
-		_ = ants.Submit(syncCalculateSum)
+		_ = ants.Submit(syncCalculateSum) //提交整个任务回调到Pool
 	}
+	//等待...
 	wg.Wait()
 	fmt.Printf("running goroutines: %d\n", ants.Running())
 	fmt.Printf("finish all tasks.\n")
-
-	// Use the pool with a method,
-	// set 10 to the capacity of goroutine pool and 1 second for expired duration.
-	p, _ := ants.NewPoolWithFunc(10, func(i interface{}) {
-		myFunc(i)
-		wg.Done()
-	})
-	defer p.Release()
-	// Submit tasks one by one.
-	for i := 0; i < runTimes; i++ {
-		wg.Add(1)
-		_ = p.Invoke(int32(i))
-	}
-	wg.Wait()
-	fmt.Printf("running goroutines: %d\n", p.Running())
-	fmt.Printf("finish all tasks, result is %d\n", sum)
-	if sum != 499500 {
-		panic("the final result is wrong!!!")
-	}
 }
+

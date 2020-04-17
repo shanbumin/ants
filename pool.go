@@ -1,61 +1,27 @@
-// MIT License
-
-// Copyright (c) 2018 Andy Pan
-
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package ants
 
 import (
+	"github.com/panjf2000/ants/v2/internal"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/panjf2000/ants/v2/internal"
 )
 
-// Pool accepts the tasks from client, it limits the total of goroutines to a given number by recycling goroutines.
+//Pool接受来自客户端的任务，它通过回收goroutine将goroutine的总数限制为给定数目。
+//Pool是一个通用的goroutine池，支持不同类型的任务，亦即每一个任务绑定一个函数提交到池中，批量执行不同类型任务，是一种广义的goroutine池；
+//本项目中还实现了另一种goroutine池 — 批量执行同类任务的goroutine池PoolWithFunc (pool_func.go)，每一个PoolWithFunc只会绑定一个任务函数pf，
+//这种Pool适用于大批量相同任务的场景，因为每个Pool只绑定一个任务函数，因此PoolWithFunc相较于Pool会更加节省内存，但通用性就不如前者了，
+//为了让大家更好地理解goroutine池的原理，这里我们用通用的Pool来分析。
+//@todo 一个Pool结构体吧了
 type Pool struct {
-	// capacity of the pool.
-	capacity int32
-
-	// running is the number of the currently running goroutines.
-	running int32
-
-	// workers is a slice that store the available workers.
-	workers workerArray
-
-	// state is used to notice the pool to closed itself.
-	state int32
-
-	// lock for synchronous operation.
-	lock sync.Locker
-
-	// cond for waiting to get a idle worker.
-	cond *sync.Cond
-
-	// workerCache speeds up the obtainment of the an usable worker in function:retrieveWorker.
-	workerCache sync.Pool
-
-	// blockingNum is the number of the goroutines already been blocked on pool.Submit, protected by pool.lock
-	blockingNum int
-
+	capacity int32 //是该Pool的容量，也就是开启worker数量的上限，每一个worker绑定一个goroutine
+	running int32  //是当前正在执行任务的worker(goroutines)数量
+	workers workerArray 	// workers is a slice that store the available workers.
+	state int32 // state is used to notice the pool to closed itself.
+	lock sync.Locker //lock是一个互斥锁/读写锁的接口类型，用以支持Pool的同步操作,v1版本这里是 sync.Mutex
+	cond *sync.Cond //该条件变量是为了等待获取一个空闲的worker
+	workerCache sync.Pool 	//原子操作之临时对象池workerCache加速了函数retrieveWorker中可用worker的获取。
+	blockingNum int 	// blockingNum is the number of the goroutines already been blocked on pool.Submit, protected by pool.lock
 	options *Options
 }
 
@@ -90,48 +56,7 @@ func (p *Pool) periodicallyPurge() {
 	}
 }
 
-// NewPool generates an instance of ants pool.
-func NewPool(size int, options ...Option) (*Pool, error) {
-	if size <= 0 {
-		return nil, ErrInvalidPoolSize
-	}
 
-	opts := loadOptions(options...)
-
-	if expiry := opts.ExpiryDuration; expiry < 0 {
-		return nil, ErrInvalidPoolExpiry
-	} else if expiry == 0 {
-		opts.ExpiryDuration = DefaultCleanIntervalTime
-	}
-
-	if opts.Logger == nil {
-		opts.Logger = defaultLogger
-	}
-
-	p := &Pool{
-		capacity: int32(size),
-		lock:     internal.NewSpinLock(),
-		options:  opts,
-	}
-	p.workerCache.New = func() interface{} {
-		return &goWorker{
-			pool: p,
-			task: make(chan func(), workerChanCap),
-		}
-	}
-	if p.options.PreAlloc {
-		p.workers = newWorkerArray(loopQueueType, size)
-	} else {
-		p.workers = newWorkerArray(stackType, 0)
-	}
-
-	p.cond = sync.NewCond(p.lock)
-
-	// Start a goroutine to clean up expired workers periodically.
-	go p.periodicallyPurge()
-
-	return p, nil
-}
 
 // ---------------------------------------------------------------------------
 
@@ -261,4 +186,50 @@ func (p *Pool) revertWorker(worker *goWorker) bool {
 	p.cond.Signal()
 	p.lock.Unlock()
 	return true
+}
+
+// ---------------------------------------------------------------------------
+
+//@todo 创建一个goroutine池(未指明统一的任务处理方法额)
+func NewPool(size int, options ...Option) (*Pool, error) {
+	//检测池子的大小
+	if size <= 0 {
+		return nil, ErrInvalidPoolSize
+	}
+    //将每个参数项的值设置集中到opts中
+	opts := loadOptions(options...)
+
+	if expiry := opts.ExpiryDuration; expiry < 0 {
+		return nil, ErrInvalidPoolExpiry
+	} else if expiry == 0 {
+		opts.ExpiryDuration = DefaultCleanIntervalTime
+	}
+
+	if opts.Logger == nil {
+		opts.Logger = defaultLogger
+	}
+
+	p := &Pool{
+		capacity: int32(size),
+		lock:     internal.NewSpinLock(),
+		options:  opts,
+	}
+	p.workerCache.New = func() interface{} {
+		return &goWorker{
+			pool: p,
+			task: make(chan func(), workerChanCap),
+		}
+	}
+	if p.options.PreAlloc {
+		p.workers = newWorkerArray(loopQueueType, size)
+	} else {
+		p.workers = newWorkerArray(stackType, 0)
+	}
+
+	p.cond = sync.NewCond(p.lock)
+
+	// Start a goroutine to clean up expired workers periodically.
+	go p.periodicallyPurge()
+
+	return p, nil
 }

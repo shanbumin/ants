@@ -39,7 +39,7 @@ var (
 	//当导入包的时候就初始化一个默认的日志实例
 	defaultLogger = Logger(log.New(os.Stderr, "", log.LstdFlags))
 	//当导入包的时候就初始化一个默认的goroutine池子
-	//defaultAntsPool, _ = NewPool(DefaultAntsPoolSize)
+	defaultAntsPool, _ = NewPool(DefaultAntsPoolSize)
 	//defaultAntsPool, _ = NewPool(DefaultAntsPoolSize,WithPreAlloc(true),WithExpiryDuration(1))
 	//defaultAntsPool, _ = NewPool(DefaultAntsPoolSize,WithOptions(Options{1,false,0,false,nil,nil}))
 )

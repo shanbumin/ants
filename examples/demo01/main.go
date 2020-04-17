@@ -7,8 +7,6 @@ import (
 	"github.com/panjf2000/ants/v2"
 )
 
-
-
 func demoFunc() {
 	time.Sleep(1 * time.Second)
 	fmt.Println("Hello World!")

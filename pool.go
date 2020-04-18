@@ -114,12 +114,12 @@ func (p *Pool) Reboot() {
 }
 
 
-// incRunning increases the number of the currently running goroutines.
+//增加当前运行的goroutines的数量
 func (p *Pool) incRunning() {
 	atomic.AddInt32(&p.running, 1)
 }
 
-// decRunning decreases the number of the currently running goroutines.
+//减少当前运行的goroutines的数量
 func (p *Pool) decRunning() {
 	atomic.AddInt32(&p.running, -1)
 }
@@ -181,21 +181,23 @@ func (p *Pool) retrieveWorker() *goWorker {
 	return w
 }
 
-// revertWorker puts a worker back into free pool, recycling the goroutines.
+//将worker放回自由池子中，并回收对应的goroutine
+//@reviser sam@2020-04-18 09:43:44
 func (p *Pool) revertWorker(worker *goWorker) bool {
 	if atomic.LoadInt32(&p.state) == CLOSED || p.Running() > p.Cap() {
 		return false
 	}
 	worker.recycleTime = time.Now()
+	//上锁
 	p.lock.Lock()
 
-	err := p.workers.insert(worker)
+	err := p.workers.insert(worker) //items中
 	if err != nil {
 		p.lock.Unlock()
 		return false
 	}
 
-	// Notify the invoker stuck in 'retrieveWorker()' of there is an available worker in the worker queue.
+	//通知调用者卡在retrieveWorker()中获取的w，告诉它现在有一个可用的worker要被放入到空闲工作队列中了
 	p.cond.Signal()
 	p.lock.Unlock()
 	return true

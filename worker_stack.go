@@ -88,6 +88,8 @@ func (wq *workerStack) binarySearch(l, r int, expiryTime time.Time) int {
 	return r
 }
 
+//恢复出厂设置
+//@reviser sam@2020-04-18 10:00:54
 func (wq *workerStack) reset() {
 	for i := 0; i < wq.len(); i++ {
 		wq.items[i].task <- nil

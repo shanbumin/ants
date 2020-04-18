@@ -98,11 +98,14 @@ func (p *Pool) Tune(size int) {
 	atomic.StoreInt32(&p.capacity, int32(size))
 }
 
-// Release Closes this pool.
+
+//关闭池子
+//1.将state置为1
+//2.将workers归零，则对应的g自然会被gc回收掉
 func (p *Pool) Release() {
 	atomic.StoreInt32(&p.state, CLOSED)
 	p.lock.Lock()
-	p.workers.reset()
+	p.workers.reset() //恢复出厂设置
 	p.lock.Unlock()
 }
 

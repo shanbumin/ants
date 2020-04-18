@@ -33,9 +33,9 @@ const (
 
 func newWorkerArray(aType arrayType, size int) workerArray {
 	switch aType {
-	case stackType://
+	case stackType://与v1版本差不多的存放方式,未预生成任何workers，此刻size为0
 		return newWorkerStack(size)
-	case loopQueueType://
+	case loopQueueType://预先生成与池子容量一样大的worker数量?此刻size为pool对应的size
 		return newWorkerLoopQueue(size)
 	default:
 		return newWorkerStack(size)
